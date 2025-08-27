@@ -3,8 +3,8 @@ package transmission
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"io"
-	"os"
 )
 
 // Defines the messaging format for peer to peer communication
@@ -114,45 +114,9 @@ func MarshallMetadata(file *Metadata) (*Message, error) {
 
 	var buf bytes.Buffer
 
-	err := writeString(&buf, file.Name)
-	if err != nil {
-		return nil, err
-	}
+	enc := gob.NewEncoder(&buf)
 
-	err = writeString(&buf, file.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(&buf, binary.BigEndian, uint32(len(file.Checksum)))
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(&buf, binary.BigEndian, file.Checksum)
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(&buf, binary.BigEndian, uint32(file.PieceLength))
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(&buf, binary.BigEndian, uint32(len(file.Pieces)))
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range len(file.Pieces) {
-		err = binary.Write(&buf, binary.BigEndian, file.Pieces[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	err = binary.Write(&buf, binary.BigEndian, uint64(file.FileLength))
-	if err != nil {
+	if err := enc.Encode(file); err != nil {
 		return nil, err
 	}
 
@@ -163,86 +127,18 @@ func MarshallMetadata(file *Metadata) (*Message, error) {
 
 func UnmarshallMetadata(message *Message) (*Metadata, error) {
 	buf := bytes.NewReader(message.Payload)
-	var length uint32
+	dec := gob.NewDecoder(buf)
 
-	//Extract name
-	err := binary.Read(buf, binary.BigEndian, &length)
-	if err != nil {
+	var metadata Metadata
+
+	if err := dec.Decode(&metadata); err != nil {
 		return nil, err
 	}
 
-	name := make([]byte, length)
-	if _, err := buf.Read(name); err != nil {
-		return nil, err
-	}
-
-	//Extract Type
-	err = binary.Read(buf, binary.BigEndian, &length)
-	if err != nil {
-		return nil, err
-	}
-
-	mimetype := make([]byte, length)
-	if _, err := buf.Read(mimetype); err != nil {
-		return nil, err
-	}
-
-	//Extract checksum
-	err = binary.Read(buf, binary.BigEndian, &length)
-	if err != nil {
-		return nil, err
-	}
-
-	checksum := make([]byte, length)
-	if _, err := buf.Read(checksum); err != nil {
-		return nil, err
-	}
-
-	var checksumArr [20]byte
-	copy(checksumArr[:], checksum)
-
-	//Extract Piecelength
-	var pieceLength int32
-	err = binary.Read(buf, binary.BigEndian, &pieceLength)
-	if err != nil {
-		return nil, err
-	}
-
-	//Extract pieces
-	err = binary.Read(buf, binary.BigEndian, &length)
-	if err != nil {
-		return nil, err
-	}
-
-	pieces := make([][20]byte, length)
-	for i := range length {
-		var piece [20]byte
-
-		if _, err := buf.Read(piece[:]); err != nil {
-			return nil, err
-		}
-
-		copy(pieces[i][:], piece[:])
-	}
-
-	//Extract Piecelength
-	var fileLength int64
-	err = binary.Read(buf, binary.BigEndian, &fileLength)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Metadata{
-		Name:        string(name),
-		Type:        string(mimetype),
-		Checksum:    checksumArr,
-		PieceLength: pieceLength,
-		Pieces:      pieces,
-		FileLength:  fileLength,
-	}, nil
+	return &metadata, nil
 }
 
-func MarshallPiece(file *os.File, index int) (*Message, error) {
+func MarshallPiece(file *VirtualFile, index int) (*Message, error) {
 	//Create a buf
 	buf := make([]byte, PIECELENGTH)
 

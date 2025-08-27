@@ -6,11 +6,9 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -57,8 +55,12 @@ type Peer struct {
 
 	mu sync.RWMutex
 
-	//Todo: this might change
-	OpenFile *os.File
+	OpenFile *VirtualFile
+	ZipMode  bool
+	//Folder were the zip file will be stored
+	ZipFolder         string
+	ZipDeleteComplete bool
+
 	Metadata *Metadata
 
 	SenderAddress         string
@@ -101,6 +103,9 @@ type Options struct {
 	MulticastAddress       string
 	DownloadFilePath       string
 	AutomaticShutdownDelay time.Duration
+	ZipMode                bool
+	ZipFolder              string
+	ZipDeleteComplete      bool
 }
 
 func (p *Peer) Send() {
@@ -134,28 +139,33 @@ func (p *Peer) Start(opts Options) error {
 
 	p.AutomaticShutdownDelay = opts.AutomaticShutdownDelay
 
+	if opts.ZipMode {
+		fmt.Println("Hello")
+		opts.FilePath, err = ZipFolder(opts.ZipFolder, opts.FilePath)
+		if err != nil {
+			return err
+		}
+	}
+
 	//Generate metadata from file
-	meta, err := GenerateMetadata(opts.FilePath)
+	meta, vf, err := GenerateMetadata(opts.FilePath)
 	if err != nil {
 		return err
 	}
 
 	p.Metadata = meta
 	p.MulticastAddress = opts.MulticastAddress
+	p.OpenFile = vf
+
+	p.ZipDeleteComplete = opts.ZipDeleteComplete
+
+	p.ZipFolder = opts.ZipFolder
 
 	if opts.ListenerLimit == 0 {
 		opts.ListenerLimit = 4
 	}
 
 	p.ListenerLimit = opts.ListenerLimit
-
-	//Open file
-	file, err := os.Open(opts.FilePath)
-	if err != nil {
-		return err
-	}
-
-	p.OpenFile = file
 
 	p.shutdown = make(chan struct{})
 
@@ -285,15 +295,10 @@ func (p *Peer) Listen(opts Options) (err error) {
 		return err
 	}
 
-	p.DownloadFilePath = filepath.Join(opts.DownloadFilePath, p.Metadata.Name)
+	p.DownloadFilePath = opts.DownloadFilePath
 
-	file, err := os.OpenFile(p.DownloadFilePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	p.OpenFile = file
+	//Build Recevier virtual file from metadata
+	p.initializeListenVirtualFile()
 
 	workers := make(chan pieceWorker, len(p.Metadata.Pieces))
 	result := make(chan PieceBlock)
@@ -306,26 +311,16 @@ func (p *Peer) Listen(opts Options) (err error) {
 	go func() {
 		p.download(workers, conn, result, errChan)
 	}()
-
-	buf := make([]byte, 0, FLUSH_TRIGGER)
 	done := 0
 
 	for done < len(p.Metadata.Pieces) {
 		select {
 		case res := <-result:
-			// Append piece data to rolling buffer
-			buf = append(buf, res.Buf...)
-
-			// Flush when buffer is full
-			if len(buf) >= FLUSH_TRIGGER {
-				if _, err := p.OpenFile.Write(buf); err != nil {
-					return err
-				}
-				if err := p.OpenFile.Sync(); err != nil {
-					return err
-				}
-				buf = buf[:0]
+			_, err := p.OpenFile.WriteAt(int64(res.Offset), res.Buf)
+			if err != nil {
+				return nil
 			}
+
 		case err := <-errChan:
 			return err
 		}
@@ -336,38 +331,9 @@ func (p *Peer) Listen(opts Options) (err error) {
 
 	}
 
-	// Final flush if buffer has leftover data
-	if len(buf) > 0 {
-		if _, err := p.OpenFile.Write(buf); err != nil {
-			return err
-		}
-		if err := p.OpenFile.Sync(); err != nil {
-			return err
-		}
-	}
-
-	//Get checksum and verify file
-	hasher := sha1.New()
-
-	_, err = p.OpenFile.Seek(0, 0)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(hasher, p.OpenFile)
-	if err != nil {
-		return err
-	}
-
-	fileCheckSum := hasher.Sum(nil)
-
-	if !bytes.Equal(fileCheckSum, p.Metadata.Checksum[:]) {
-		p.dlog("downloaded file does not match checksum possible corruption detected")
-		return fmt.Errorf("checksum does not match")
-	}
-
 	close(workers)
 	conn.Close()
+	p.OpenFile.Close()
 	return nil
 }
 
@@ -732,6 +698,19 @@ func (p *Peer) calculateBoundsForPiece(index int) (begin, end int) {
 	}
 
 	return begin, end
+}
+
+func (p *Peer) initializeListenVirtualFile() {
+	vf := VirtualFile{
+		rootPath:     p.Metadata.Name,
+		downloadPath: p.DownloadFilePath,
+		files:        p.Metadata.Folders,
+		pieces:       p.Metadata.Pieces,
+		totalSize:    p.Metadata.FileLength,
+		handles:      make([]*os.File, len(p.Metadata.Folders)),
+		single:       p.Metadata.Single,
+	}
+	p.OpenFile = &vf
 }
 
 func (p *Peer) verifyPiece(piece *PieceBlock) bool {

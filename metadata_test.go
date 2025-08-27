@@ -2,11 +2,12 @@ package transmission
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
 func TestGenerateMetadata(t *testing.T) {
-	res, err := GenerateMetadata("./testdata/example.jpg")
+	res, _, err := GenerateMetadata("./testdata/example.jpg")
 	if err != nil {
 		t.Fatalf("an error as occured while generating metadata %v\n", err)
 	}
@@ -37,4 +38,13 @@ func TestGenerateMetadata(t *testing.T) {
 			t.Fatalf("invalid piece")
 		}
 	}
+}
+
+func TestMe(t *testing.T) {
+	_, vf, err := GenerateMetadata("./testdata/books")
+	if err != nil {
+		t.Fatalf("an error as occured while generating metadata %v\n", err)
+	}
+
+	fmt.Printf("Virtual file %+v\n", vf)
 }
