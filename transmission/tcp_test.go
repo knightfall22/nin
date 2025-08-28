@@ -2,6 +2,7 @@ package transmission
 
 import (
 	"net"
+	"os"
 	"testing"
 	"time"
 )
@@ -26,6 +27,8 @@ func TestStartAndListen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an error as occurred while listening %v\n", err)
 	}
+
+	os.RemoveAll("./download_test")
 }
 
 func TestStartAndListenConcurrent(t *testing.T) {
@@ -67,6 +70,7 @@ func TestStartAndListenConcurrent(t *testing.T) {
 	}
 
 	p.Shutdown()
+	os.RemoveAll("./download_test")
 }
 
 func TestStartAndListenConcurrentDefaultMax(t *testing.T) {
@@ -100,6 +104,7 @@ func TestStartAndListenConcurrentDefaultMax(t *testing.T) {
 	}
 
 	p.Shutdown()
+	os.RemoveAll("./download_test")
 }
 
 func TestListenerAutoShutdown(t *testing.T) {
@@ -128,16 +133,18 @@ func TestListenerAutoShutdown(t *testing.T) {
 		t.Fatalf("expected %s but got %s", dead, p.State)
 	}
 
+	os.RemoveAll("./download_test")
 }
 
 func TestStartAndListenCompressed(t *testing.T) {
-	Debug = 0
+	Debug = 1
 	p := new(Peer)
 	err := p.Start(Options{
-		FilePath:          "./testdata",
-		ZipFolder:         "./zip_test",
-		ZipMode:           true,
-		ZipDeleteComplete: true})
+		FilePath:               "./testdata",
+		ZipFolder:              "./zip_test",
+		ZipMode:                true,
+		AutomaticShutdownDelay: 30 * time.Second,
+		ZipDeleteComplete:      true})
 	if err != nil {
 		t.Fatalf("an error as occurred while starting up send %v\n", err)
 	}
@@ -154,4 +161,7 @@ func TestStartAndListenCompressed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an error as occurred while listening %v\n", err)
 	}
+
+	os.RemoveAll("./download_test")
+	time.Sleep(1 * time.Minute)
 }

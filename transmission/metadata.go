@@ -1,19 +1,15 @@
 package transmission
 
 import (
-	"bytes"
 	"crypto/sha1"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
-
-	"github.com/gabriel-vasile/mimetype"
 )
 
-const PIECELENGTH = 512 * 1024 // 512 KB
+var PIECELENGTH = 512 * 1024 // 512 KB
 
 type FileInfo struct {
 	Path              string
@@ -49,91 +45,6 @@ func GenerateMetadata(path string) (*Metadata, *VirtualFile, error) {
 
 	return metadata, &vf, nil
 
-}
-
-func generateFileMetadata(path string) (*Metadata, error) {
-	var Metadata Metadata
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	Metadata.Name = filepath.Base(f.Name())
-
-	//Retrieve file length
-	stat, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	Metadata.FileLength = stat.Size()
-
-	//Set piece length(512Kib)
-	Metadata.PieceLength = PIECELENGTH
-
-	Metadata.Pieces, err = pieceFile(f, Metadata.FileLength)
-	if err != nil {
-		return nil, err
-	}
-
-	//Fetch mimetype
-	mime, file, err := recycleReader(f)
-	if err != nil {
-		return nil, err
-	}
-
-	Metadata.Type = mime
-
-	//Get checksum
-	hasher := sha1.New()
-
-	_, err = io.Copy(hasher, file)
-	if err != nil {
-		return nil, err
-	}
-
-	fullhash := hasher.Sum(nil)
-	copy(Metadata.Checksum[:], fullhash)
-
-	return &Metadata, nil
-}
-
-// Read file mimetype and return read bytes
-func recycleReader(input io.Reader) (mimeType string, recycled io.Reader, err error) {
-	header := bytes.NewBuffer(nil)
-
-	mtype, err := mimetype.DetectReader(io.TeeReader(input, header))
-	if err != nil {
-		return
-	}
-
-	recycled = io.MultiReader(header, input)
-
-	return mtype.String(), recycled, nil
-}
-
-func pieceFile(input *os.File, size int64) ([][20]byte, error) {
-	//Hash 512kb blocks of file
-	numPieces := (size + PIECELENGTH - 1) / PIECELENGTH
-
-	pieces := make([][20]byte, numPieces)
-
-	buf := make([]byte, PIECELENGTH)
-
-	for i := range numPieces {
-		offset := i * PIECELENGTH
-		n, err := input.ReadAt(buf, int64(offset))
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-
-		hash := sha1.Sum(buf[:n])
-		copy(pieces[i][:], hash[:])
-	}
-
-	return pieces, nil
 }
 
 type VirtualFile struct {
@@ -219,9 +130,6 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 				path = filepath.Join(vf.downloadPath, fileBase, vf.files[fileIndex].Path)
 			}
 
-			fmt.Println("path", vf.downloadPath)
-			fmt.Println("dir", filepath.Dir(path))
-
 			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 				panic(err)
 			}
@@ -301,7 +209,7 @@ func (vf *VirtualFile) ToMetadata() *Metadata {
 	var metadata Metadata
 
 	metadata.Name = vf.rootPath
-	metadata.PieceLength = PIECELENGTH
+	metadata.PieceLength = int32(PIECELENGTH)
 	metadata.Folders = vf.files
 	metadata.Pieces = vf.pieces
 
@@ -332,14 +240,14 @@ func (vf *VirtualFile) buildFileHandles() error {
 
 func (vf *VirtualFile) generatePieces() ([][20]byte, error) {
 	//Hash 512kb blocks of file
-	numPieces := (vf.totalSize + PIECELENGTH - 1) / PIECELENGTH
+	numPieces := (vf.totalSize + int64(PIECELENGTH) - 1) / int64(PIECELENGTH)
 
 	pieces := make([][20]byte, numPieces)
 
 	buf := make([]byte, PIECELENGTH)
 
 	for i := range numPieces {
-		offset := i * PIECELENGTH
+		offset := i * int64(PIECELENGTH)
 		n, err := vf.ReadAt(buf, int64(offset))
 		if err != nil && err != io.EOF {
 			return nil, err
@@ -398,3 +306,88 @@ func (vf *VirtualFile) walkFunc(path string, info fs.FileInfo, err error) error 
 
 	return nil
 }
+
+// func generateFileMetadata(path string) (*Metadata, error) {
+// 	var Metadata Metadata
+
+// 	f, err := os.Open(path)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer f.Close()
+
+// 	Metadata.Name = filepath.Base(f.Name())
+
+// 	//Retrieve file length
+// 	stat, err := f.Stat()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	Metadata.FileLength = stat.Size()
+
+// 	//Set piece length(512Kib)
+// 	Metadata.PieceLength = PIECELENGTH
+
+// 	Metadata.Pieces, err = pieceFile(f, Metadata.FileLength)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	//Fetch mimetype
+// 	mime, file, err := recycleReader(f)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	Metadata.Type = mime
+
+// 	//Get checksum
+// 	hasher := sha1.New()
+
+// 	_, err = io.Copy(hasher, file)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	fullhash := hasher.Sum(nil)
+// 	copy(Metadata.Checksum[:], fullhash)
+
+// 	return &Metadata, nil
+// }
+
+// // Read file mimetype and return read bytes
+// func recycleReader(input io.Reader) (mimeType string, recycled io.Reader, err error) {
+// 	header := bytes.NewBuffer(nil)
+
+// 	mtype, err := mimetype.DetectReader(io.TeeReader(input, header))
+// 	if err != nil {
+// 		return
+// 	}
+
+// 	recycled = io.MultiReader(header, input)
+
+// 	return mtype.String(), recycled, nil
+// }
+
+// func pieceFile(input *os.File, size int64) ([][20]byte, error) {
+// 	//Hash 512kb blocks of file
+// 	numPieces := (size + PIECELENGTH - 1) / PIECELENGTH
+
+// 	pieces := make([][20]byte, numPieces)
+
+// 	buf := make([]byte, PIECELENGTH)
+
+// 	for i := range numPieces {
+// 		offset := i * PIECELENGTH
+// 		n, err := input.ReadAt(buf, int64(offset))
+// 		if err != nil && err != io.EOF {
+// 			return nil, err
+// 		}
+
+// 		hash := sha1.Sum(buf[:n])
+// 		copy(pieces[i][:], hash[:])
+// 	}
+
+// 	return pieces, nil
+// }

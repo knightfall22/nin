@@ -81,7 +81,7 @@ type Peer struct {
 	DownloadFilePath string
 
 	//Time is seconds that determines how long the server will idle(no listener present) before it closes.
-	//Default == 3 minutes
+	//Default == 1 minutes
 	AutomaticShutdownDelay time.Duration
 
 	//When a new listener joins it's incremented.
@@ -134,13 +134,12 @@ func (p *Peer) Start(opts Options) error {
 	}
 
 	if opts.AutomaticShutdownDelay == 0 {
-		opts.AutomaticShutdownDelay = 3 * time.Minute
+		opts.AutomaticShutdownDelay = 1 * time.Minute
 	}
 
 	p.AutomaticShutdownDelay = opts.AutomaticShutdownDelay
 
 	if opts.ZipMode {
-		fmt.Println("Hello")
 		opts.FilePath, err = ZipFolder(opts.ZipFolder, opts.FilePath)
 		if err != nil {
 			return err
@@ -338,11 +337,14 @@ func (p *Peer) Listen(opts Options) (err error) {
 }
 
 func (p *Peer) Shutdown() {
-	close(p.shutdown)
-	p.selfConn.Close()
-	p.wg.Wait()
-	p.State = dead
-
+	if p.State != dead {
+		close(p.shutdown)
+		p.selfConn.Close()
+		p.wg.Wait()
+		p.OpenFile.Close()
+		p.cleanupZip()
+		p.State = dead
+	}
 }
 
 func (p *Peer) connectToSender() (net.Conn, error) {
@@ -456,7 +458,7 @@ func (p *Peer) run(host string) {
 				select {
 				case <-p.shutdown:
 					p.dlog("closing server")
-					p.OpenFile.Close()
+					p.Shutdown()
 					return
 				default:
 					p.dlog(err.Error())
@@ -698,6 +700,13 @@ func (p *Peer) calculateBoundsForPiece(index int) (begin, end int) {
 	}
 
 	return begin, end
+}
+
+// Cleanup zip folder
+func (p *Peer) cleanupZip() {
+	if p.ZipDeleteComplete {
+		_ = os.RemoveAll(p.ZipFolder)
+	}
 }
 
 func (p *Peer) initializeListenVirtualFile() {

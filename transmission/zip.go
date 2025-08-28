@@ -36,6 +36,8 @@ func ZipFolder(destination string, source string) (string, error) {
 		return "", err
 	}
 
+	defer archive.Close()
+
 	w := zip.NewWriter(archive)
 	err = filepath.Walk(source, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
