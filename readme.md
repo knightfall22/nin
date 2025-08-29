@@ -1,6 +1,7 @@
 ### About
 
-This simple tool allows you to transfer file between two or more systems on the same local network. NOTE: only use on a network you trust.
+This simple tool allows you to transfer file between two or more systems on the same local network.
+NOTE: only use on a network you trust.
 
 ### Features:
 
