@@ -2,3 +2,5 @@ testdata
 download_test
 zip_test
 output.log
+releases
+cross_build.sh
