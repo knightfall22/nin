@@ -13,7 +13,7 @@ var listenCmd = &cobra.Command{
 	Use:          "listen",
 	SilenceUsage: true,
 	Aliases:      []string{"s"},
-	Short:        "A brief description of your command",
+	Short:        "Listen for ready sender",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		debug, err := cmd.Flags().GetInt("debug")
 		if err != nil {
