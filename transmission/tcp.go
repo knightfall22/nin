@@ -18,6 +18,8 @@ import (
 
 var Debug = 1
 
+const DefaultAutomaticShutdownDelay = 60 * time.Second
+
 type PeerState int8
 
 func (p PeerState) String() string {
@@ -103,23 +105,32 @@ type Options struct {
 	MulticastAddress       string
 	DownloadFilePath       string
 	AutomaticShutdownDelay time.Duration
-	ZipMode                bool
 	ZipFolder              string
 	ZipDeleteComplete      bool
 }
 
-func (p *Peer) Send() {
+func (p *Peer) broadCast() {
 
 	p.dlog("starting sender server")
 
-	go p.run(LOCAL_DEFAULT_ADDRESS)
 	go p.broadcastOnLocalNetwork(false)
 	go p.broadcastOnLocalNetwork(true)
 
-	time.Sleep(500 * time.Millisecond)
 }
 
-func (p *Peer) Start(opts Options) error {
+func (p *Peer) Send(opts Options) error {
+	err := p.initSender(opts)
+	if err != nil {
+		return err
+	}
+	p.broadCast()
+
+	time.Sleep(500 * time.Millisecond)
+	p.run(LOCAL_DEFAULT_ADDRESS)
+	return nil
+}
+
+func (p *Peer) initSender(opts Options) error {
 	id, err := generatePeerID(sender)
 	if err != nil {
 		return err
@@ -139,7 +150,7 @@ func (p *Peer) Start(opts Options) error {
 
 	p.AutomaticShutdownDelay = opts.AutomaticShutdownDelay
 
-	if opts.ZipMode {
+	if opts.ZipFolder != "" {
 		opts.FilePath, err = ZipFolder(opts.ZipFolder, opts.FilePath)
 		if err != nil {
 			return err
@@ -168,7 +179,6 @@ func (p *Peer) Start(opts Options) error {
 
 	p.shutdown = make(chan struct{})
 
-	p.Send()
 	return nil
 }
 
@@ -330,6 +340,11 @@ func (p *Peer) Listen(opts Options) (err error) {
 
 	}
 
+	_, err = conn.Write(listenerFinishedAck())
+	if err != nil {
+		return err
+	}
+
 	close(workers)
 	conn.Close()
 	p.OpenFile.Close()
@@ -337,6 +352,7 @@ func (p *Peer) Listen(opts Options) (err error) {
 }
 
 func (p *Peer) Shutdown() {
+	p.mu.Lock()
 	if p.State != dead {
 		close(p.shutdown)
 		p.selfConn.Close()
@@ -345,11 +361,13 @@ func (p *Peer) Shutdown() {
 		p.cleanupZip()
 		p.State = dead
 	}
+	p.mu.Unlock()
 }
 
 func (p *Peer) connectToSender() (net.Conn, error) {
 	conn, err := net.DialTimeout("tcp", p.SenderAddress, 30*time.Second)
 	if err != nil {
+		p.dlog("error connecting to sender %v", err)
 		return nil, err
 	}
 
@@ -443,64 +461,65 @@ func (p *Peer) run(host string) {
 		panic(err)
 	}
 
+	fmt.Fprintln(os.Stdout, "Ready to begin sending file")
+	fmt.Fprintf(os.Stdout, "Listening on %s\n", l.Addr().String())
+
 	p.mu.Lock()
 	p.selfConn = l
 	p.mu.Unlock()
 
 	go p.autoShutdown()
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		for {
-			conn, err := p.selfConn.Accept()
-			if err != nil {
-				select {
-				case <-p.shutdown:
-					p.dlog("closing server")
-					p.Shutdown()
-					return
-				default:
-					p.dlog(err.Error())
+	for {
+		conn, err := p.selfConn.Accept()
+		if err != nil {
+			select {
+			case <-p.shutdown:
+				p.dlog("closing server")
+				fmt.Fprintln(os.Stderr, "Closing server....")
+				p.Shutdown()
+				return
+			default:
+				p.dlog(err.Error())
+				return
+			}
+		}
+
+		fmt.Fprintf(os.Stdout, "Received connection from %s\n", conn.RemoteAddr().String())
+		p.dlog("%s has connected", conn.RemoteAddr().String())
+
+		p.wg.Add(1)
+		go func(conn net.Conn) {
+			defer func() {
+				conn.Close()
+				p.wg.Done()
+				p.mu.Lock()
+				for i, c := range p.Listeners {
+					if c == conn {
+						p.Listeners = append(p.Listeners[:i], p.Listeners[i+1:]...)
+						break
+					}
+				}
+				p.mu.Unlock()
+
+				p.mu.RLock()
+				p.dlog("listener %s disconnected, remaining listeners: %d", conn.RemoteAddr(), len(p.Listeners))
+				p.mu.RUnlock()
+			}()
+
+			for {
+				p.dlog("waiting for message from %s", conn.RemoteAddr())
+				p.mu.RLock()
+				p.dlog("listener length: %d", len(p.Listeners))
+				p.mu.RUnlock()
+				if err := p.messageProcessor(conn); err != nil {
+					p.dlog("listener %s error or EOF: %v", conn.RemoteAddr(), err)
 					return
 				}
 			}
+		}(conn)
 
-			p.dlog("%s has connected", conn.RemoteAddr().String())
-
-			p.wg.Add(1)
-			go func(conn net.Conn) {
-				defer func() {
-					conn.Close()
-					p.wg.Done()
-					p.mu.Lock()
-					for i, c := range p.Listeners {
-						if c == conn {
-							p.Listeners = append(p.Listeners[:i], p.Listeners[i+1:]...)
-							break
-						}
-					}
-					p.mu.Unlock()
-
-					p.mu.RLock()
-					p.dlog("listener %s disconnected, remaining listeners: %d", conn.RemoteAddr(), len(p.Listeners))
-					p.mu.RUnlock()
-				}()
-
-				for {
-					p.dlog("waiting for message from %s", conn.RemoteAddr())
-					p.mu.RLock()
-					p.dlog("listener length: %d", len(p.Listeners))
-					p.mu.RUnlock()
-					if err := p.messageProcessor(conn); err != nil {
-						p.dlog("listener %s error or EOF: %v", conn.RemoteAddr(), err)
-						return
-					}
-				}
-			}(conn)
-
-		}
-	}()
+	}
 }
 
 func (p *Peer) autoShutdown() {
@@ -513,6 +532,7 @@ func (p *Peer) autoShutdown() {
 		if len(p.Listeners) == 0 {
 			p.mu.RUnlock()
 
+			fmt.Fprintln(os.Stdout, "server idled for too long, shutting down....")
 			p.dlog("server idled for too long, shutting down....")
 			timer.Stop()
 			p.Shutdown()
@@ -680,6 +700,10 @@ func (p *Peer) messageProcessor(conn net.Conn) error {
 		}
 
 		p.dlog("sent piece %d to listener: %s", idx, conn.RemoteAddr().String())
+
+	case MessageListenerFinishedAcknowledgement:
+		p.dlog("%s has finished downloading", conn.RemoteAddr().String())
+		fmt.Fprintf(os.Stdout, "%s has finished downloading\n", conn.RemoteAddr().String())
 	}
 	return nil
 }
@@ -769,8 +793,8 @@ func requestPiece(index int) []byte {
 	return RequestPiece(index)
 }
 
-func requestPieceAck() []byte {
-	msg := Message{ID: MessagePieceAcknowledgement}
+func listenerFinishedAck() []byte {
+	msg := Message{ID: MessageListenerFinishedAcknowledgement}
 	return msg.Serialize()
 }
 

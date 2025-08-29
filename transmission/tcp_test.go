@@ -7,36 +7,47 @@ import (
 	"time"
 )
 
-func TestStartAndListen(t *testing.T) {
-	Debug = 0
+func initializeSender(t *testing.T, opts Options) *Peer {
 	p := new(Peer)
-	err := p.Start(Options{FilePath: "./testdata"})
+
+	err := p.initSender(opts)
 	if err != nil {
 		t.Fatalf("an error as occurred while starting up send %v\n", err)
 	}
 
+	p.broadCast()
+
+	go func() {
+		p.run(LOCAL_DEFAULT_ADDRESS)
+	}()
+
+	time.Sleep(500 * time.Millisecond)
+	return p
+}
+
+func TestStartAndListen(t *testing.T) {
+	Debug = 0
+
+	// p := initializeSender(t, Options{FilePath: "./testdata/books"})
+
 	l := new(Peer)
 
-	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, p.portStr)
-	err = l.Listen(Options{
+	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, "9208")
+	err := l.Listen(Options{
 		SenderAddress:    senderAddress,
 		MaxPieceRetries:  4,
-		DownloadFilePath: "./download_test",
+		DownloadFilePath: "./download",
 	})
 
 	if err != nil {
 		t.Fatalf("an error as occurred while listening %v\n", err)
 	}
 
-	os.RemoveAll("./download_test")
+	// os.RemoveAll("./download_test")
 }
 
 func TestStartAndListenConcurrent(t *testing.T) {
-	p := new(Peer)
-	err := p.Start(Options{FilePath: "./testdata/books"})
-	if err != nil {
-		t.Fatalf("an error as occurred while starting up send %v\n", err)
-	}
+	p := initializeSender(t, Options{FilePath: "./testdata/books"})
 
 	errChan := make(chan error, 2)
 	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, p.portStr)
@@ -65,7 +76,7 @@ func TestStartAndListenConcurrent(t *testing.T) {
 	for range 2 {
 		e := <-errChan
 		if e != nil {
-			t.Fatalf("an error as occurred while listening %v\n", err)
+			t.Fatalf("an error as occurred while listening %v\n", e)
 		}
 	}
 
@@ -74,11 +85,7 @@ func TestStartAndListenConcurrent(t *testing.T) {
 }
 
 func TestStartAndListenConcurrentDefaultMax(t *testing.T) {
-	p := new(Peer)
-	err := p.Start(Options{FilePath: "./testdata/TCP-IP.pdf"})
-	if err != nil {
-		t.Fatalf("an error as occurred while starting up send %v\n", err)
-	}
+	p := initializeSender(t, Options{FilePath: "./testdata/books"})
 
 	errChan := make(chan error, p.ListenerLimit)
 	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, p.portStr)
@@ -99,7 +106,7 @@ func TestStartAndListenConcurrentDefaultMax(t *testing.T) {
 	for range p.ListenerLimit {
 		e := <-errChan
 		if e != nil {
-			t.Fatalf("an error as occurred while listening %v\n", err)
+			t.Fatalf("an error as occurred while listening %v\n", e)
 		}
 	}
 
@@ -108,16 +115,12 @@ func TestStartAndListenConcurrentDefaultMax(t *testing.T) {
 }
 
 func TestListenerAutoShutdown(t *testing.T) {
-	p := new(Peer)
-	err := p.Start(Options{FilePath: "./testdata/TCP-IP.pdf", AutomaticShutdownDelay: 5 * time.Second})
-	if err != nil {
-		t.Fatalf("an error as occurred while starting up send %v\n", err)
-	}
+	p := initializeSender(t, Options{FilePath: "./testdata/TCP-IP.pdf", AutomaticShutdownDelay: 5 * time.Second})
 
 	l := new(Peer)
 
 	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, p.portStr)
-	err = l.Listen(Options{
+	err := l.Listen(Options{
 		SenderAddress:    senderAddress,
 		MaxPieceRetries:  4,
 		DownloadFilePath: "./download_test",
@@ -138,21 +141,16 @@ func TestListenerAutoShutdown(t *testing.T) {
 
 func TestStartAndListenCompressed(t *testing.T) {
 	Debug = 1
-	p := new(Peer)
-	err := p.Start(Options{
+	p := initializeSender(t, Options{
 		FilePath:               "./testdata",
 		ZipFolder:              "./zip_test",
-		ZipMode:                true,
 		AutomaticShutdownDelay: 30 * time.Second,
 		ZipDeleteComplete:      true})
-	if err != nil {
-		t.Fatalf("an error as occurred while starting up send %v\n", err)
-	}
 
 	l := new(Peer)
 
 	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, p.portStr)
-	err = l.Listen(Options{
+	err := l.Listen(Options{
 		SenderAddress:    senderAddress,
 		MaxPieceRetries:  4,
 		DownloadFilePath: "./download_test",

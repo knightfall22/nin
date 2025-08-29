@@ -19,7 +19,7 @@ const (
 	MessageListenerAcknowledgement
 	MessageRequestPiece
 	MessagePiece
-	MessagePieceAcknowledgement
+	MessageListenerFinishedAcknowledgement
 )
 
 type PieceBlock struct {

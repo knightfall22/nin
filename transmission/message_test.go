@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/gob"
 	"testing"
 )
 
@@ -26,12 +27,20 @@ func TestFormatMetadata(t *testing.T) {
 		FileLength: 1024,
 	}
 
+	var buf bytes.Buffer
+
+	enc := gob.NewEncoder(&buf)
+
+	if err := enc.Encode(file); err != nil {
+		t.Fatalf("an error as occured while formatting file %v\n", err)
+	}
+
 	message, err := MarshallMetadata(&file)
 	if err != nil {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	if !bytes.Equal(message.Payload, formatPayload) {
+	if !bytes.Equal(message.Payload, buf.Bytes()) {
 		t.Fatalf("invalid message payload")
 	}
 
@@ -54,7 +63,15 @@ func TestFormatMetadataSerialization(t *testing.T) {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	if !bytes.Equal(message.Payload, formatPayload) {
+	var buf bytes.Buffer
+
+	enc := gob.NewEncoder(&buf)
+
+	if err := enc.Encode(file); err != nil {
+		t.Fatalf("an error as occured while formatting file %v\n", err)
+	}
+
+	if !bytes.Equal(message.Payload, buf.Bytes()) {
 		t.Fatalf("invalid message payload")
 	}
 
@@ -65,7 +82,7 @@ func TestFormatMetadataSerialization(t *testing.T) {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	expectedSize := len(formatPayload) + 1
+	expectedSize := len(buf.Bytes()) + 1
 	if size != uint32(expectedSize) {
 		t.Fatalf("invalid message size")
 	}
@@ -88,7 +105,15 @@ func TestFormatMetadataDeSerialization(t *testing.T) {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	if !bytes.Equal(message.Payload, formatPayload) {
+	var buf bytes.Buffer
+
+	enc := gob.NewEncoder(&buf)
+
+	if err := enc.Encode(file); err != nil {
+		t.Fatalf("an error as occured while formatting file %v\n", err)
+	}
+
+	if !bytes.Equal(message.Payload, buf.Bytes()) {
 		t.Fatalf("invalid message payload")
 	}
 
@@ -99,7 +124,7 @@ func TestFormatMetadataDeSerialization(t *testing.T) {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	expectedSize := len(formatPayload) + 1
+	expectedSize := len(buf.Bytes()) + 1
 	if size != uint32(expectedSize) {
 		t.Fatalf("invalid message size")
 	}
@@ -131,7 +156,15 @@ func TestFormatMetadataParsing(t *testing.T) {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	if !bytes.Equal(message.Payload, formatPayload) {
+	var buf bytes.Buffer
+
+	enc := gob.NewEncoder(&buf)
+
+	if err := enc.Encode(file); err != nil {
+		t.Fatalf("an error as occured while formatting file %v\n", err)
+	}
+
+	if !bytes.Equal(message.Payload, buf.Bytes()) {
 		t.Fatalf("invalid message payload")
 	}
 
@@ -142,7 +175,7 @@ func TestFormatMetadataParsing(t *testing.T) {
 		t.Fatalf("an error as occured while formatting file %v\n", err)
 	}
 
-	expectedSize := len(formatPayload) + 1
+	expectedSize := len(buf.Bytes()) + 1
 	if size != uint32(expectedSize) {
 		t.Fatalf("invalid message size")
 	}
