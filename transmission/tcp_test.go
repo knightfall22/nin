@@ -28,11 +28,11 @@ func initializeSender(t *testing.T, opts Options) *Peer {
 func TestStartAndListen(t *testing.T) {
 	Debug = 0
 
-	// p := initializeSender(t, Options{FilePath: "./testdata/books"})
+	p := initializeSender(t, Options{FilePath: "./testdata/books"})
 
 	l := new(Peer)
 
-	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, "9208")
+	senderAddress := net.JoinHostPort(LOCAL_DEFAULT_ADDRESS, p.portStr)
 	err := l.Listen(Options{
 		SenderAddress:    senderAddress,
 		MaxPieceRetries:  4,
@@ -43,7 +43,7 @@ func TestStartAndListen(t *testing.T) {
 		t.Fatalf("an error as occurred while listening %v\n", err)
 	}
 
-	// os.RemoveAll("./download_test")
+	os.RemoveAll("./download_test")
 }
 
 func TestStartAndListenConcurrent(t *testing.T) {
@@ -140,9 +140,8 @@ func TestListenerAutoShutdown(t *testing.T) {
 }
 
 func TestStartAndListenCompressed(t *testing.T) {
-	Debug = 1
 	p := initializeSender(t, Options{
-		FilePath:               "./testdata",
+		FilePath:               "./testdata/books",
 		ZipFolder:              "./zip_test",
 		AutomaticShutdownDelay: 30 * time.Second,
 		ZipDeleteComplete:      true})

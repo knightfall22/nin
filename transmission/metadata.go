@@ -1,6 +1,7 @@
 package transmission
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"fmt"
 	"io"
@@ -90,7 +91,6 @@ func (vf *VirtualFile) findFileAndOffset(globalOffset int64) (fileIndex int, loc
 }
 
 func (vf *VirtualFile) ReadAt(p []byte, offset int64) (int, error) {
-	// Find starting file
 	fileIndex, localOffset := vf.findFileAndOffset(offset)
 
 	bytesRead := 0
@@ -103,7 +103,6 @@ func (vf *VirtualFile) ReadAt(p []byte, offset int64) (int, error) {
 		bytesRead += n
 		p = p[n:]
 
-		//handle transition to next file
 		if err == io.EOF && fileIndex < len(vf.files)-1 {
 			fileIndex++
 			localOffset = 0
@@ -151,7 +150,7 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 			vf.handles[fileIndex] = file
 		}
 
-		file := vf.handles[fileIndex]
+		// mak[filepath.Base(vf.files[fileIndex].Path)] = struct{}{}
 
 		maxWriteSize := vf.files[fileIndex].Size - localOffset
 		if maxWriteSize <= 0 {
@@ -163,17 +162,24 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 		writeSize := int64(len(p))
 		writeSize = min(writeSize, maxWriteSize)
 
-		n, err := file.WriteAt(p[:writeSize], localOffset)
+		// _, err := vf.handles[fileIndex].Seek(localOffset, io.SeekStart)
+		// if err != nil {
+		// 	return bytesWritten, err
+		// }
+
+		n, err := io.Copy(vf.handles[fileIndex], bytes.NewReader(p[:writeSize]))
 		if err != nil {
 			return bytesWritten, err
 		}
 
-		p = p[n:]
+		p = p[writeSize:]
 
-		bytesWritten += n
+		bytesWritten += int(n)
 		fileIndex++
 		localOffset = 0
 	}
+
+	// fmt.Printf("Blarg %+v\n", mak)
 
 	return bytesWritten, nil
 

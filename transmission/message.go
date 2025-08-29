@@ -24,7 +24,7 @@ const (
 
 type PieceBlock struct {
 	Index         int32
-	Offset        int32
+	Offset        int64
 	NumTransfered int32
 	Buf           []byte
 }
@@ -158,7 +158,7 @@ func MarshallPiece(file *VirtualFile, index int) (*Message, error) {
 		return nil, err
 	}
 
-	err = binary.Write(&payload, binary.BigEndian, uint32(offset))
+	err = binary.Write(&payload, binary.BigEndian, uint64(offset))
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func UnmarshallPiece(message *Message) (*PieceBlock, error) {
 		return nil, err
 	}
 
-	piece.Buf = message.Payload[12:]
+	piece.Buf = message.Payload[16:]
 
 	return &piece, nil
 }

@@ -15,6 +15,13 @@ var listenCmd = &cobra.Command{
 	Aliases:      []string{"s"},
 	Short:        "A brief description of your command",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		debug, err := cmd.Flags().GetInt("debug")
+		if err != nil {
+			return err
+		}
+
+		transmission.Debug = debug
+
 		senderAddr, err := cmd.Flags().GetString("sender")
 		if err != nil {
 			return err

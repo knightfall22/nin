@@ -89,7 +89,7 @@ func TestReadingVirtualFile(t *testing.T) {
 }
 
 func TestWritingFromVirtualFile(t *testing.T) {
-	PIECELENGTH = 150 * 1024 //150kb
+	// PIECELENGTH = 150 * 1024 //150kb
 	meta, vf, err := GenerateMetadata("./testdata/small/")
 	if err != nil {
 		t.Fatalf("an error as occured while generating metadata %v\n", err)

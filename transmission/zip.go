@@ -13,6 +13,7 @@ var ErrNotFolder = fmt.Errorf("cannot zip single file")
 
 // Zip all files in provide path and return path to zip folder
 func ZipFolder(destination string, source string) (string, error) {
+	fmt.Fprintf(os.Stdout, "Zipping folder %s\n", source)
 	info, err := os.Stat(source)
 	if err != nil {
 		return "", err
@@ -32,7 +33,6 @@ func ZipFolder(destination string, source string) (string, error) {
 
 	archive, err := os.OpenFile(destination, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		fmt.Println("Hello")
 		return "", err
 	}
 
@@ -64,6 +64,8 @@ func ZipFolder(destination string, source string) (string, error) {
 			if _, err := io.Copy(w1, f1); err != nil {
 				return err
 			}
+
+			fmt.Fprintf(os.Stdout, "Added %s to zip file\n", path)
 		}
 
 		return nil

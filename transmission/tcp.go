@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/schollz/peerdiscovery"
+	"github.com/schollz/progressbar/v3"
 )
 
 var Debug = 1
@@ -91,6 +92,8 @@ type Peer struct {
 	ToCommplete int
 
 	shutdown chan struct{}
+
+	bar *progressbar.ProgressBar
 
 	//used internally
 	selfConn net.Listener
@@ -200,7 +203,7 @@ func (p *Peer) Listen(opts Options) (err error) {
 			ipv4Discoveries, err1 := peerdiscovery.Discover(peerdiscovery.Settings{
 				Limit:            1,
 				Payload:          []byte("ok"),
-				TimeLimit:        500 * time.Millisecond,
+				TimeLimit:        2 * time.Second,
 				Delay:            20 * time.Millisecond,
 				MulticastAddress: p.MulticastAddress,
 			})
@@ -220,7 +223,7 @@ func (p *Peer) Listen(opts Options) (err error) {
 			ipv4Discoveries, err1 := peerdiscovery.Discover(peerdiscovery.Settings{
 				Limit:            1,
 				Payload:          []byte("ok"),
-				TimeLimit:        500 * time.Millisecond,
+				TimeLimit:        2 * time.Second,
 				Delay:            20 * time.Millisecond,
 				MulticastAddress: p.MulticastAddress,
 				IPVersion:        peerdiscovery.IPv6,
@@ -320,23 +323,37 @@ func (p *Peer) Listen(opts Options) (err error) {
 	go func() {
 		p.download(workers, conn, result, errChan)
 	}()
+
+	p.bar = progressbar.NewOptions64(p.Metadata.FileLength,
+		progressbar.OptionSetDescription("Downloading file..."),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionThrottle(5*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\nDownload completed!\n")
+		}),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionSetRenderBlankState(true),
+		progressbar.OptionSetPredictTime(true),
+	)
 	done := 0
 
-	for done < len(p.Metadata.Pieces) {
+	for done < int(p.Metadata.FileLength) {
 		select {
 		case res := <-result:
-			_, err := p.OpenFile.WriteAt(int64(res.Offset), res.Buf)
+			n, err := p.OpenFile.WriteAt(int64(res.Offset), res.Buf)
 			if err != nil {
 				return nil
 			}
 
+			done += n
+			p.bar.Add(n)
 		case err := <-errChan:
 			return err
 		}
-		done++
-
-		percent := float64(done) / float64(len(p.Metadata.Pieces)) * 100
-		log.Printf("(%0.2f%%)", percent)
 
 	}
 
