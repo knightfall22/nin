@@ -42,7 +42,7 @@ func PingServer(address string) error {
 	m, err := DeserializeMessageFromReader(c)
 	if err != nil {
 		//Fix ipv6 issue later
-		log.Println(err)
+		// log.Println(err)
 		return err
 	}
 
