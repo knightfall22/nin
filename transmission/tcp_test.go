@@ -36,7 +36,7 @@ func TestStartAndListen(t *testing.T) {
 	err := l.Listen(Options{
 		SenderAddress:    senderAddress,
 		MaxPieceRetries:  4,
-		DownloadFilePath: "./download",
+		DownloadFilePath: "./download_test",
 	})
 
 	if err != nil {

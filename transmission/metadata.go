@@ -95,8 +95,9 @@ func (vf *VirtualFile) ReadAt(p []byte, offset int64) (int, error) {
 
 	bytesRead := 0
 
+	vf.mu.Lock()
+	defer vf.mu.Unlock()
 	for len(p) > 0 && fileIndex < len(vf.files) {
-
 		n, err := vf.handles[fileIndex].ReadAt(p, localOffset)
 
 		bytesRead += n
@@ -125,27 +126,32 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 
 	bytesWritten := 0
 
+	vf.mu.Lock()
+	defer vf.mu.Unlock()
 	for len(p) > 0 && fileIndex < len(vf.files) {
+		if vf.handles[fileIndex] == nil {
+			var path string
+			fileBase := filepath.Base(vf.rootPath)
 
-		var path string
-		fileBase := filepath.Base(vf.rootPath)
+			if vf.single {
+				path = filepath.Join(vf.downloadPath, fileBase)
+			} else {
+				path = filepath.Join(vf.downloadPath, fileBase, vf.files[fileIndex].Path)
+			}
 
-		if vf.single {
-			path = filepath.Join(vf.downloadPath, fileBase)
-		} else {
-			path = filepath.Join(vf.downloadPath, fileBase, vf.files[fileIndex].Path)
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				panic(err)
+			}
+
+			file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+			if err != nil {
+				return bytesWritten, err
+			}
+
+			vf.handles[fileIndex] = file
 		}
 
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			panic(err)
-		}
-
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
-		if err != nil {
-			return bytesWritten, err
-		}
-
-		defer file.Close()
+		file := vf.handles[fileIndex]
 
 		maxWriteSize := vf.files[fileIndex].Size - localOffset
 		if maxWriteSize <= 0 {
