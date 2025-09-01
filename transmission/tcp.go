@@ -112,7 +112,7 @@ type Options struct {
 	ZipDeleteComplete      bool
 }
 
-func (p *Peer) broadCast() {
+func (p *Peer) broadcast() {
 
 	p.dlog("starting sender server")
 
@@ -126,7 +126,7 @@ func (p *Peer) Send(opts Options) error {
 	if err != nil {
 		return err
 	}
-	p.broadCast()
+	p.broadcast()
 
 	time.Sleep(500 * time.Millisecond)
 	p.run(LOCAL_DEFAULT_ADDRESS)
@@ -446,7 +446,7 @@ func (p *Peer) download(workers chan pieceWorker, conn net.Conn, result chan Pie
 }
 
 func (p *Peer) run(host string) {
-
+	//Idea: I dont think we need for this logic
 	network := "tcp"
 	addr := net.JoinHostPort(host, p.portStr)
 	if host != "" {

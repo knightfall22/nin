@@ -65,6 +65,7 @@ type VirtualFile struct {
 	downloadPath string
 }
 
+// Finds the file and offset for a given global offset.
 func (vf *VirtualFile) findFileAndOffset(globalOffset int64) (fileIndex int, localOffset int64) {
 	if globalOffset < 0 {
 		return 0, 0
@@ -79,10 +80,17 @@ func (vf *VirtualFile) findFileAndOffset(globalOffset int64) (fileIndex int, loc
 		return 0, 0
 	}
 
+	//Binary search to check if the offset sits within the start of of a file(cummulative offset) and the end of the file.
+	//hence cummulative offset + file size > global offset
 	fileIndex = sort.Search(len(vf.files), func(i int) bool {
 		return vf.files[i].CummulativeOffset+vf.files[i].Size > globalOffset
 	})
 
+	//Retrieve what position to start within the file.
+	//Think of it expressed as such. Imagine you have 4 files of size 190kb, 155kb, 345kb, 349kb.
+	//Since we read each piece at 512Kib and fetch offsets at index * piece length.
+	//The first file has an offset of 0 and a local offset of 0. That means our readAt will read the first second and half of the 3rd file.
+	//When the piece at index one is requested, local offset would start at the second half of the third file.
 	if fileIndex < len(vf.files) {
 		localOffset = globalOffset - vf.files[fileIndex].CummulativeOffset
 	}
@@ -101,8 +109,12 @@ func (vf *VirtualFile) ReadAt(p []byte, offset int64) (int, error) {
 		n, err := vf.handles[fileIndex].ReadAt(p, localOffset)
 
 		bytesRead += n
+
+		//The caller still has the full buffer buf with all data intact.
+		//Bytes aren’t visible through p anymore because the view is shortened.
 		p = p[n:]
 
+		//If we've reached the end of the file and there are more files
 		if err == io.EOF && fileIndex < len(vf.files)-1 {
 			fileIndex++
 			localOffset = 0
@@ -150,8 +162,7 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 			vf.handles[fileIndex] = file
 		}
 
-		// mak[filepath.Base(vf.files[fileIndex].Path)] = struct{}{}
-
+		//Determine which position to write to
 		maxWriteSize := vf.files[fileIndex].Size - localOffset
 		if maxWriteSize <= 0 {
 			fileIndex++
@@ -159,6 +170,7 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 			continue
 		}
 
+		//Determine how much to write. If maxWriteSize is less than the length of the buffer, write that much.
 		writeSize := int64(len(p))
 		writeSize = min(writeSize, maxWriteSize)
 
@@ -167,6 +179,7 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 		// 	return bytesWritten, err
 		// }
 
+		//Found `io.Copy` to work alot better than `WriteAt`. Since our writes work like appends anyways we can just use `io.Copy`.
 		n, err := io.Copy(vf.handles[fileIndex], bytes.NewReader(p[:writeSize]))
 		if err != nil {
 			return bytesWritten, err
@@ -178,8 +191,6 @@ func (vf *VirtualFile) WriteAt(offset int64, p []byte) (int, error) {
 		fileIndex++
 		localOffset = 0
 	}
-
-	// fmt.Printf("Blarg %+v\n", mak)
 
 	return bytesWritten, nil
 

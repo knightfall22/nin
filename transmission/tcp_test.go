@@ -15,7 +15,7 @@ func initializeSender(t *testing.T, opts Options) *Peer {
 		t.Fatalf("an error as occurred while starting up send %v\n", err)
 	}
 
-	p.broadCast()
+	p.broadcast()
 
 	go func() {
 		p.run(LOCAL_DEFAULT_ADDRESS)
