@@ -77,7 +77,7 @@ func init() {
 	sendCmd.PersistentFlags().String("zip", "", "zip folder path")
 	sendCmd.PersistentFlags().Bool("zipdelete", true, "delete zip folder after sending(default=true)")
 	sendCmd.PersistentFlags().String("multicast", "", "multicast address")
-	sendCmd.PersistentFlags().Int("listners", 0, "number of listners(default=0)")
+	sendCmd.PersistentFlags().Int("listners", 0, "number of listners(default=4)")
 	sendCmd.PersistentFlags().Duration("delay", transmission.DefaultAutomaticShutdownDelay, "automatic shutdown delay(default=60s)")
 	sendCmd.PersistentFlags().Int("debug", 0, "debug level(default=0)")
 	// sendCmd.PersistentFlags().Int("retries", 0, "max piece retries(default=0)")

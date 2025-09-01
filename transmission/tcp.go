@@ -655,20 +655,6 @@ func (p *Peer) messageProcessor(conn net.Conn) error {
 	}
 
 	switch msg.ID {
-	// case MessageSenderRelayHandshake:
-	// 	p.dlog("sender detected")
-	// 	p.mu.Lock()
-	// 	if p.Sender != nil {
-	// 		p.dlog("sender already exists, this shouldn't happen")
-	// 	}
-	// 	_, err := conn.Write(senderRelayAck())
-	// 	if err != nil {
-	// 		p.mu.Unlock()
-	// 		return err
-	// 	}
-	// 	p.Sender = conn
-	// 	p.mu.Unlock()
-
 	case MessageListenerSenderHandshake:
 		p.dlog("listener detected")
 
@@ -723,24 +709,6 @@ func (p *Peer) messageProcessor(conn net.Conn) error {
 		fmt.Fprintf(os.Stdout, "%s has finished downloading\n", conn.RemoteAddr().String())
 	}
 	return nil
-}
-
-// Calculate the size of a piece
-func (p *Peer) calculatePieceSize(index int) int {
-	begin, end := p.calculateBoundsForPiece(index)
-	return end - begin
-}
-
-// Given the piece length and file length. Find the boundary of a piece at an index
-func (p *Peer) calculateBoundsForPiece(index int) (begin, end int) {
-	begin = index * int(p.Metadata.PieceLength)
-	end = begin + int(p.Metadata.PieceLength)
-
-	if end > int(p.Metadata.PieceLength) {
-		end = int(p.Metadata.FileLength)
-	}
-
-	return begin, end
 }
 
 // Cleanup zip folder
@@ -826,3 +794,21 @@ func sendPong() []byte {
 
 	return msg.Serialize()
 }
+
+// // Calculate the size of a piece
+// func (p *Peer) calculatePieceSize(index int) int {
+// 	begin, end := p.calculateBoundsForPiece(index)
+// 	return end - begin
+// }
+
+// // Given the piece length and file length. Find the boundary of a piece at an index
+// func (p *Peer) calculateBoundsForPiece(index int) (begin, end int) {
+// 	begin = index * int(p.Metadata.PieceLength)
+// 	end = begin + int(p.Metadata.PieceLength)
+
+// 	if end > int(p.Metadata.PieceLength) {
+// 		end = int(p.Metadata.FileLength)
+// 	}
+
+// 	return begin, end
+// }

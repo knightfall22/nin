@@ -16,3 +16,5 @@ NOTE: only use on a network you trust.
 ### Install
 
 You can download an appropriate release for your system - [here](https://github.com/knightfall22/nin/releases/tag/beta)
+
+Or run `go install github.com/knightfall22/nin@latest`
